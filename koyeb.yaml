@@ -1,0 +1,17 @@
+services:
+  - name: youtube-downloader-api
+    type: web
+    dockerfile: Dockerfile
+    ports:
+      - port: 8000
+        protocol: http
+    env:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "8000"
+      - key: DOWNLOAD_DIR
+        value: /tmp/downloads
+    routes:
+      - path: /
+        port: 8000
