@@ -1,7 +1,7 @@
 # Base image
 FROM node:20-slim
 
-# Install ffmpeg + yt-dlp dependencies
+# Install ffmpeg + curl
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     python3 \
@@ -9,26 +9,24 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install yt-dlp
-RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
+RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+    -o /usr/local/bin/yt-dlp \
     && chmod a+rx /usr/local/bin/yt-dlp
 
-# Set working directory
+# Working directory
 WORKDIR /app
 
-# Copy package files
+# Install dependencies
 COPY package*.json ./
-
-# Install Node dependencies
 RUN npm install --production
 
-# Copy source code
+# Copy source
 COPY . .
 
-# Create downloads directory
-RUN mkdir -p downloads
+# Create temp download dir
+RUN mkdir -p /tmp/downloads
 
-# Expose port
-EXPOSE 3000
+# Koyeb default port 8000
+EXPOSE 8000
 
-# Start server
 CMD ["node", "server.js"]
