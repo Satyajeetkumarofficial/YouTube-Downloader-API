@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: youtube-downloader-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DOWNLOAD_DIR
+        value: /tmp/downloads
