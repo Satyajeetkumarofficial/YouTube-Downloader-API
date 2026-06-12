@@ -6,13 +6,25 @@ const fs = require("fs");
 const app = express();
 app.use(express.json());
 
-// Render ke liye /tmp use karo (writable directory)
 const DOWNLOAD_DIR = process.env.DOWNLOAD_DIR || "/tmp/downloads";
 if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 
+// ─── Base yt-dlp flags (429 fix) ─────────────────────────────────────────────
+const BASE_FLAGS = [
+  "--no-playlist",
+  "--socket-timeout 30",
+  "--retries 5",
+  "--fragment-retries 5",
+  "--add-header 'Accept-Language:en-US,en;q=0.9'",
+  "--add-header 'Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'",
+  `--add-header 'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'`,
+  "--extractor-args 'youtube:player_client=web,mweb'",
+].join(" ");
+
 function runYtDlp(args) {
+  const cmd = `yt-dlp ${BASE_FLAGS} ${args}`;
   return new Promise((resolve, reject) => {
-    exec(`yt-dlp ${args}`, { maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+    exec(cmd, { maxBuffer: 10 * 1024 * 1024, env: { ...process.env, PATH: `/root/.deno/bin:${process.env.PATH}` } }, (err, stdout, stderr) => {
       if (err) return reject(stderr || err.message);
       resolve(stdout.trim());
     });
@@ -23,14 +35,14 @@ function safeFilename(name) {
   return name.replace(/[^a-z0-9_\-\.]/gi, "_").substring(0, 100);
 }
 
-// GET /info
+// ── GET /info ────────────────────────────────────────────────────────────────
 app.get("/info", async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: "url parameter required" });
   try {
     const raw = await runYtDlp(`--dump-json "${url}"`);
     const data = JSON.parse(raw);
-    const qualities = [...new Set((data.formats || []).filter((f) => f.height).map((f) => `${f.height}p`))].sort((a, b) => parseInt(b) - parseInt(a));
+    const qualities = [...new Set((data.formats || []).filter(f => f.height).map(f => `${f.height}p`))].sort((a, b) => parseInt(b) - parseInt(a));
     res.json({
       title: data.title,
       duration: data.duration,
@@ -47,7 +59,7 @@ app.get("/info", async (req, res) => {
   }
 });
 
-// GET /qualities
+// ── GET /qualities ───────────────────────────────────────────────────────────
 app.get("/qualities", async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: "url parameter required" });
@@ -55,8 +67,8 @@ app.get("/qualities", async (req, res) => {
     const raw = await runYtDlp(`--dump-json "${url}"`);
     const data = JSON.parse(raw);
     const formats = (data.formats || [])
-      .filter((f) => f.vcodec !== "none" && f.height)
-      .map((f) => ({
+      .filter(f => f.vcodec !== "none" && f.height)
+      .map(f => ({
         format_id: f.format_id,
         quality: `${f.height}p`,
         ext: f.ext,
@@ -70,7 +82,7 @@ app.get("/qualities", async (req, res) => {
   }
 });
 
-// GET /download/video
+// ── GET /download/video ──────────────────────────────────────────────────────
 app.get("/download/video", async (req, res) => {
   const { url, quality = "best" } = req.query;
   if (!url) return res.status(400).json({ error: "url parameter required" });
@@ -78,11 +90,13 @@ app.get("/download/video", async (req, res) => {
     const infoRaw = await runYtDlp(`--print title "${url}"`);
     const title = safeFilename(infoRaw);
     const outPath = path.join(DOWNLOAD_DIR, `${title}_${Date.now()}.mp4`);
+
     let formatArg = "-f bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best";
     if (quality !== "best") {
       const h = quality.replace("p", "");
       formatArg = `-f "bestvideo[height<=${h}][ext=mp4]+bestaudio[ext=m4a]/best[height<=${h}][ext=mp4]/best"`;
     }
+
     await runYtDlp(`${formatArg} --merge-output-format mp4 -o "${outPath}" "${url}"`);
     res.setHeader("Content-Disposition", `attachment; filename="${title}.mp4"`);
     res.setHeader("Content-Type", "video/mp4");
@@ -94,7 +108,7 @@ app.get("/download/video", async (req, res) => {
   }
 });
 
-// GET /download/audio
+// ── GET /download/audio ──────────────────────────────────────────────────────
 app.get("/download/audio", async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: "url parameter required" });
@@ -113,13 +127,13 @@ app.get("/download/audio", async (req, res) => {
   }
 });
 
-// Health Check
+// ── Health Check ─────────────────────────────────────────────────────────────
 app.get("/", (req, res) =>
   res.json({
-    status: "✅ YouTube Downloader API running on Render!",
+    status: "✅ YouTube Downloader API running!",
     endpoints: ["GET /info?url=", "GET /qualities?url=", "GET /download/video?url=&quality=720p", "GET /download/audio?url="],
   })
 );
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running on port ${PORT}`));
+const PORT = process.env.PORT || 8000;
+app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server on port ${PORT}`));
